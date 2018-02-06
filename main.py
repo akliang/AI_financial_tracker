@@ -1,6 +1,11 @@
 
+import sys
+sys.path.append('/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages')
+
 import csv
 from tinydb import TinyDB,where,Query
+from tinydb.operations import add,set
+
 
 with open('test.csv','rb') as f:
   reader = csv.reader(f)
@@ -23,9 +28,12 @@ for num,var in enumerate(line_items):
 # scan for categories
 catdb = TinyDB('./categories.json')
 for cat in catdb:
-  print(cat['item'])
-  print mtdb.search(Query().description.search(cat['item']))
+  #print(cat['item'])
+  #print mtdb.search(Query().description.search(cat['item']))
+  mtdb.update(set('tag',cat['tag']),Query().description.search(cat['item']))
 
 
+for f in mtdb:
+  print f
 
 
