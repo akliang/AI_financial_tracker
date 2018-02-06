@@ -7,50 +7,43 @@ from tinydb import TinyDB,where,Query
 from tinydb.operations import add,set
 
 
+def import_csv(file,db_name,db_handle):
+  with open(file,'rb') as f:
+    reader = csv.reader(f)
+    line_items = list(reader)
+
+  # first row is the header
+  headers=line_items[0]
+  del line_items[0]
+
+  # convert everything to lower case
+  headers=[k.lower() for k in headers]
+  line_items=[[k.lower() for k in i] for i in line_items]
+
+  db_handle = TinyDB(db_name)
+  db_handle.purge()
+  for num,var in enumerate(line_items):
+    # very special hack line for changing amount to float
+    if (len(var)>2):
+      var[4]=float(var[4])
+    db_handle.insert(dict(zip(headers,var)))
+
+  return db_handle
+
+
 # set up categories
-with open('categories.csv','rb') as f:
-  reader = csv.reader(f)
-  line_items = list(reader)
+catdb = import_csv('./categories.csv','./categories.json','catdb')
+mtdb  = import_csv('./full.csv','./moneytracker.json','mtdb')
 
-# first row is the header
-headers=line_items[0]
-del line_items[0]
+# change the dollar amounts to float
+# todo: find a db-friendly way to do this
+# (currently done as a hack in import_csv)
 
-# convert everything to lower case
-headers=[k.lower() for k in headers]
-line_items=[[k.lower() for k in i] for i in line_items]
-
-catdb = TinyDB('./categories.json')
-catdb.purge()
-for num,var in enumerate(line_items):
-  catdb.insert(dict(zip(headers,var)))
-
-
-
-#with open('test.csv','rb') as f:
-with open('full.csv','rb') as f:
-  reader = csv.reader(f)
-  line_items = list(reader)
-
-# first row is the header
-headers=line_items[0]
-del line_items[0]
-
-# convert everything to lower case
-headers=[k.lower() for k in headers]
-line_items=[[k.lower() for k in i] for i in line_items]
-
-# build the current database
-mtdb = TinyDB('./moneytracker.json')
-mtdb.purge()
-for num,var in enumerate(line_items):
-  var[4]=float(var[4])
-  mtdb.insert(dict(zip(headers,var)))
 
 # remove positive-value entries
 mtdb.remove(Query().amount > 0)
 
-# scan for categories
+# scan for categories and report errors
 for cat in catdb:
   # detect and record multiple-tagging
   for f in mtdb.search( (Query().description.search(cat['item'])) & (Query().tag.exists()) ):
@@ -59,5 +52,9 @@ for cat in catdb:
 
 for f in mtdb.search(~ Query().tag.exists()):
   print "Untagged entry: %-40s %s" % (f['amount'],f['description'])
+
+
+
+# output fun statistics
 
 
