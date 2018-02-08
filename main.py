@@ -54,7 +54,31 @@ for f in mtdb.search(~ Query().tag.exists()):
   print "Untagged entry: %-40s %s" % (f['amount'],f['description'])
 
 
+# build list of unique tags
+#uniqtag = set()
+#for f in mtdb.search(Query().tag.exists()):
+#  uniqtag.add(f['tag'])
 
-# output fun statistics
+#print uniqtag
+uniquetag = set(f['tag'] for f in mtdb.search(Query().tag.exists()))
+
+
+
+
+
+exit()
+
+
+
+#### output fun statistics ####
+
+# total sum per category
+for cat in catdb:
+  sumtot = 0
+  for f in mtdb.search(Query().tag == cat['tag']):
+    sumtot += f['amount']
+
+  print "%-15s: %0.2f" % (cat['tag'],sumtot)
+
 
 
