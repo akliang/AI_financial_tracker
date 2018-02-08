@@ -5,6 +5,7 @@ sys.path.append('/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7
 import csv
 from tinydb import TinyDB,where,Query
 from tinydb.operations import add,set
+import types
 
 
 def import_csv(file,db_name,db_handle):
@@ -60,7 +61,12 @@ for f in mtdb.search(~ Query().tag.exists()):
 #  uniqtag.add(f['tag'])
 
 #print uniqtag
-uniquetag = set(f['tag'] for f in mtdb.search(Query().tag.exists()))
+#uniquetag = set(f['tag'] for f in mtdb.search(Query().tag.exists()))
+for f in mtdb.search(~ Query().tag.exists()):
+#  type(f)
+#  exit()
+  print f
+  print type(f)
 
 
 
