@@ -1,7 +1,4 @@
 
-# python3 division can handle int/int=float, whereas python2 returns an int
-from __future__ import division
-
 # on my laptop, the path to Python is incomplete and it cant find where pip packages are installed
 import sys
 sys.path.append('/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages')
@@ -13,6 +10,7 @@ import datetime
 import operator
 import plotly
 import plotly.graph_objs as go
+import hashlib
 
 def main():
   if len(sys.argv)==1:
@@ -24,16 +22,22 @@ def main():
   print("### Script output and debug information ###")
 
   # set up categories
+  print("Setting up categories...")
   catdb = import_csv('./categories.csv','./categories.json','catdb',True)
 
   # import each input file
-  for d,f in enumerate(sys.argv[1:]):
-    if d==0:
-      purge=True
-    else:
-      purge=False
+  ### old style: delete the db and import only the input files
+  #for d,f in enumerate(sys.argv[1:]):
+  #  if d==0:
+  #    purge=True
+  #  else:
+  #    purge=False
+  #  print("Reading in file %s..." % f)
+  #  mtdb  = import_csv(f,'./moneytracker.json','mtdb',purge)
+  ### new style, keep appending new data to a master db
+  for f in (sys.argv[1:]):
     print("Reading in file %s..." % f)
-    mtdb  = import_csv(f,'./moneytracker.json','mtdb',purge)
+    mtdb  = import_csv(f,'./moneytracker.json','mtdb')
 
   # change the dollar amounts to float
   # todo: find a db-friendly way to do this
@@ -46,8 +50,10 @@ def main():
   for cat in catdb:
     # detect and record multiple-tagging
     for f in mtdb.search( (tinydb.Query().description.search(cat['item'])) & (tinydb.Query().tag.exists()) ):
-      print("Double tag:     %-8s %-15s %-15s %s" % (f['amount'],f['tag'],cat['tag'],f['description']))
-    mtdb.update(tinydb.operations.set('tag',cat['tag']),tinydb.Query().description.search(cat['item']))
+      if f['tag']!=cat['tag']:  # truly a clash, not just an old entry
+        print("Double tag:     %-8s %-15s %-15s %s" % (f['amount'],f['tag'],cat['tag'],f['description']))
+    # add category tag to all entries that dont already have a tag assigned
+    mtdb.update(tinydb.operations.set('tag',cat['tag']), (tinydb.Query().description.search(cat['item'])) & ~(tinydb.Query().tag.exists()) )
   for f in mtdb.search(~ tinydb.Query().tag.exists()):
     print("Untagged entry: %-40s %s" % (f['amount'],f['description']))
 
@@ -74,9 +80,12 @@ def print_output(mtdb):
   sumtot=0
   for f in mtdb.all():
     sumtot+=f['amount']
+  # round sumtot to nearest cent
+  sumtot="%0.2f" % sumtot
+  sumtot=float(sumtot)
   resrow.append(['Total amount spent',sumtot])
   resrow.append(['Number of items',len(mtdb)])
-  resrow.append(['Average amount per item',"%0.2f" % (sumtot/len(mtdb))])  # this method rounds to nearest cent value
+  resrow.append(['Average amount per item',"%0.2f" % (sumtot/len(mtdb))])
   resrow.append(['Start date',uniqdays[0]])
   resrow.append(['End date',uniqdays[-1]])
   for f in resrow:
@@ -161,6 +170,8 @@ def print_output(mtdb):
 
 
 def import_csv(file,db_name,db_handle,purge = False):
+  debug=True
+
   with open(file,'rt') as f:
     reader = csv.reader(f)
     line_items = list(reader)
@@ -179,11 +190,43 @@ def import_csv(file,db_name,db_handle,purge = False):
   db_handle = tinydb.TinyDB(db_name)
   if purge==True:
     db_handle.purge()
-  for num,var in enumerate(line_items):
-    # very special hack line for changing amount to float
-    if (len(var)>2):
+
+  isData=False
+  if (len(line_items[0])>2):
+    isData=True
+    headers.append('hash')
+
+  ins_cnt=0
+  skip_cnt=0
+  for var in line_items:
+    if isData:
+      # this means the csv file is data, not the categories file
+      # do some special operations
+
+      # generate a hash string
+      hashstr=''.join(var)
+      hashstr=hashlib.sha256(hashstr.encode('utf-8')).hexdigest()
+
+      # convert the dollar value to float
       var[4]=float(var[4])
+
+      # check if already in database
+      if len(db_handle)>0:
+        if db_handle.count(tinydb.Query().hash == hashstr) > 0:
+          skip_cnt += 1
+          if debug:
+            for err in db_handle.search(tinydb.Query().hash == hashstr):
+              print(err)
+          continue
+
+      # append hash to var
+      var.append(hashstr)
+
     db_handle.insert(dict(zip(headers,var)))
+    ins_cnt += 1
+
+  print("Number of records inserted: %d" % (ins_cnt))
+  print("Number of records skipped: %d\n" % (skip_cnt))
 
   return db_handle
 # end import_csv
