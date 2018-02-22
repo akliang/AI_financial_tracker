@@ -11,6 +11,8 @@ import tinydb
 import tinydb.operations
 import datetime
 import operator
+import plotly
+import plotly.graph_objs as go
 
 def main():
   if len(sys.argv)==1:
@@ -153,6 +155,7 @@ def print_output(mtdb):
     print("%-15s %-30s %8.2f" % (f[0],f[1],f[2]))
   print("%-46s %8.2f" % ("--- total ---",sumtot))
   save_csv(resrow,"items_over_spend_threshold.csv")
+  plot_py("spending_per_category.csv","spending_per_day.csv","highest_spend_per_category.csv","items_over_spend_threshold.csv")
 # end print_output
 
 
@@ -192,6 +195,26 @@ def save_csv(input_list,outfile):
     wr.writerows(input_list)
 # end save_csv
 
+def plot_py(input_csv,*args):
+  fig = plotly.tools.make_subplots(rows=len(args)+1,cols=1)
+
+  # read the input as a 2D list
+  with open(input_csv,'rt') as f:
+    reader = csv.reader(f)
+    line_items = list(reader)
+  trace1=go.Scatter( x=[item[0] for item in line_items], y=[item[1] for item in line_items] )
+  fig.append_trace(trace1,1,1)
+
+  for argi,arg in enumerate(args):
+    with open(arg,'rt') as f:
+      reader = csv.reader(f)
+      line_items = list(reader)
+    trace2=go.Scatter( x=[item[0] for item in line_items], y=[item[1] for item in line_items] )
+    fig.append_trace(trace2,argi+2,1)
+
+  plotly.offline.plot(fig)
+
+# end plot_py
 
 if __name__ == "__main__":
   main()
