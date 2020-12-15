@@ -3,6 +3,7 @@
 import sys
 sys.path.append('/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages')
 
+import os
 import csv
 import tinydb
 import tinydb.operations
@@ -11,6 +12,7 @@ import operator
 import plotly
 import plotly.graph_objs as go
 import hashlib
+import helper_functions as hf
 
 def main():
   if len(sys.argv)==1:
@@ -43,7 +45,7 @@ def main():
   # todo: find a db-friendly way to do this
   # (currently done as a hack in import_csv)
 
-  # remove positive-value entries
+  # remove positive-value entries (those correspond to paying off a balance)
   mtdb.remove(tinydb.Query().amount > 0)
 
   # assign categories to each item and report errors
