@@ -1,8 +1,4 @@
 
-# on my laptop, the path to Python is incomplete and it cant find where pip packages are installed
-import sys
-sys.path.append('/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages')
-
 import os
 import csv
 import tinydb
@@ -12,55 +8,45 @@ import operator
 import plotly
 import plotly.graph_objs as go
 import hashlib
+import base_func
 import helper_functions as hf
 
 def main():
-  if len(sys.argv)==1:
-    print("Needs an input file as an input parameter")
-    exit()
+    if len(sys.argv)==1:
+        print("Needs an input file as an input parameter")
+        exit()
 
-  # some newlines to look prettier
-  print('\n'*2)
-  print("### Script output and debug information ###")
+    print("\n\n### Script output and debug information ###")
 
-  # set up categories
-  print("Setting up categories...")
-  catdb = import_csv('./categories.csv','./categories.json','catdb',True)
+    # set up categories
+    print("Setting up categories...")
+    catdb = import_csv('./data/categories.csv', './data/categories.json', 'catdb', True)
 
-  # import each input file
-  ### old style: delete the db and import only the input files
-  #for d,f in enumerate(sys.argv[1:]):
-  #  if d==0:
-  #    purge=True
-  #  else:
-  #    purge=False
-  #  print("Reading in file %s..." % f)
-  #  mtdb  = import_csv(f,'./moneytracker.json','mtdb',purge)
-  ### new style, keep appending new data to a master db
-  for f in (sys.argv[1:]):
-    print("Reading in file %s..." % f)
-    mtdb  = import_csv(f,'./moneytracker.json','mtdb')
+    # import each input file
+    for f in (sys.argv[1:]):
+        print("Reading in file %s..." % f)
+        mtdb  = import_csv(f, './moneytracker.json', 'mtdb')
 
-  # change the dollar amounts to float
-  # todo: find a db-friendly way to do this
-  # (currently done as a hack in import_csv)
+    # change the dollar amounts to float
+    # todo: find a db-friendly way to do this
+    # (currently done as a hack in import_csv)
 
-  # remove positive-value entries (those correspond to paying off a balance)
-  mtdb.remove(tinydb.Query().amount > 0)
+    # remove positive-value entries (those correspond to paying off a balance)
+    mtdb.remove(tinydb.Query().amount > 0)
 
-  # assign categories to each item and report errors
-  for cat in catdb:
-    # detect and record multiple-tagging
-    for f in mtdb.search( (tinydb.Query().description.search(cat['item'])) & (tinydb.Query().tag.exists()) ):
-      if f['tag']!=cat['tag']:  # truly a clash, not just an old entry
-        print("Double tag:     %-8s %-15s %-15s %s" % (f['amount'],f['tag'],cat['tag'],f['description']))
-    # add category tag to all entries that dont already have a tag assigned
-    mtdb.update(tinydb.operations.set('tag',cat['tag']), (tinydb.Query().description.search(cat['item'])) & ~(tinydb.Query().tag.exists()) )
-  for f in mtdb.search(~ tinydb.Query().tag.exists()):
-    print("Untagged entry: %-40s %s" % (f['amount'],f['description']))
+    # assign categories to each item and report errors
+    for cat in catdb:
+        # detect and record multiple-tagging
+        for f in mtdb.search( (tinydb.Query().description.search(cat['item'])) & (tinydb.Query().tag.exists()) ):
+            if f['tag']!=cat['tag']:  # truly a clash, not just an old entry
+                print("Double tag:     %-8s %-15s %-15s %s" % (f['amount'],f['tag'],cat['tag'],f['description']))
+        # add category tag to all entries that dont already have a tag assigned
+        mtdb.update(tinydb.operations.set('tag',cat['tag']), (tinydb.Query().description.search(cat['item'])) & ~(tinydb.Query().tag.exists()) )
+    for f in mtdb.search(~ tinydb.Query().tag.exists()):
+        print("Untagged entry: %-40s %s" % (f['amount'],f['description']))
 
 
-  print_output(mtdb)
+    print_output(mtdb)
 # end main
 
 
@@ -171,95 +157,6 @@ def print_output(mtdb):
 
 
 
-def import_csv(file,db_name,db_handle,purge = False):
-  debug=True
-
-  with open(file,'rt') as f:
-    reader = csv.reader(f)
-    line_items = list(reader)
-
-  # first row is the header
-  headers=line_items[0]
-  del line_items[0]
-
-  # convert everything to lower case
-  headers=[k.lower() for k in headers]
-  line_items=[[k.lower() for k in i] for i in line_items]
-
-  # remove spaces in header
-  headers=[k.replace(' ','') for k in headers]
-
-  db_handle = tinydb.TinyDB(db_name)
-  if purge==True:
-    db_handle.purge()
-
-  isData=False
-  if (len(line_items[0])>2):
-    isData=True
-    headers.append('hash')
-
-  ins_cnt=0
-  skip_cnt=0
-  for var in line_items:
-    if isData:
-      # this means the csv file is data, not the categories file
-      # do some special operations
-
-      # generate a hash string
-      hashstr=''.join(var)
-      hashstr=hashlib.sha256(hashstr.encode('utf-8')).hexdigest()
-
-      # convert the dollar value to float
-      var[4]=float(var[4])
-
-      # check if already in database
-      if len(db_handle)>0:
-        if db_handle.count(tinydb.Query().hash == hashstr) > 0:
-          skip_cnt += 1
-          if debug:
-            for err in db_handle.search(tinydb.Query().hash == hashstr):
-              print(err)
-          continue
-
-      # append hash to var
-      var.append(hashstr)
-
-    db_handle.insert(dict(zip(headers,var)))
-    ins_cnt += 1
-
-  print("Number of records inserted: %d" % (ins_cnt))
-  print("Number of records skipped: %d\n" % (skip_cnt))
-
-  return db_handle
-# end import_csv
-
-
-def save_csv(input_list,outfile):
-  with open(outfile,'w') as myfile:
-    wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
-    wr.writerows(input_list)
-# end save_csv
-
-def plot_py(input_csv,*args):
-  fig = plotly.tools.make_subplots(rows=len(args)+1,cols=1)
-
-  # read the input as a 2D list
-  with open(input_csv,'rt') as f:
-    reader = csv.reader(f)
-    line_items = list(reader)
-  trace1=go.Scatter( x=[item[0] for item in line_items], y=[item[1] for item in line_items] )
-  fig.append_trace(trace1,1,1)
-
-  for argi,arg in enumerate(args):
-    with open(arg,'rt') as f:
-      reader = csv.reader(f)
-      line_items = list(reader)
-    trace2=go.Scatter( x=[item[0] for item in line_items], y=[item[1] for item in line_items] )
-    fig.append_trace(trace2,argi+2,1)
-
-  plotly.offline.plot(fig)
-
-# end plot_py
 
 if __name__ == "__main__":
   main()
