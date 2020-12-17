@@ -1,15 +1,11 @@
 
-import os
-import csv
+import sys
 import tinydb
 import tinydb.operations
 import datetime
 import operator
-import plotly
-import plotly.graph_objs as go
-import hashlib
-import base_func
-import helper_functions as hf
+import base_functions as bf
+
 
 def main():
     if len(sys.argv)==1:
@@ -20,12 +16,12 @@ def main():
 
     # set up categories
     print("Setting up categories...")
-    catdb = import_csv('./data/categories.csv', './data/categories.json', 'catdb', True)
+    catdb = bf.import_csv('./data/categories.csv', 'catdb', True)
 
-    # import each input file
+    # import each in ut file
     for f in (sys.argv[1:]):
         print("Reading in file %s..." % f)
-        mtdb  = import_csv(f, './moneytracker.json', 'mtdb')
+        mtdb = bf.import_csv(f, './moneytracker.json', 'mtdb')
 
     # change the dollar amounts to float
     # todo: find a db-friendly way to do this
@@ -45,119 +41,110 @@ def main():
     for f in mtdb.search(~ tinydb.Query().tag.exists()):
         print("Untagged entry: %-40s %s" % (f['amount'],f['description']))
 
-
     print_output(mtdb)
 # end main
 
 
 def print_output(mtdb):
-  # build uniqe list of tags used in db
-  uniqtags = set(f['tag'] for f in mtdb.search(tinydb.Query().tag.exists()))
+    # build uniqe list of tags used in db
+    uniqtags = set(f['tag'] for f in mtdb.search(tinydb.Query().tag.exists()))
 
-  # build list of dates
-  uniqdays=[f['transdate'] for f in mtdb.all()]
-  uniqdays=set(uniqdays)  # get unique values
-  uniqdays=list(uniqdays)  # convert it back into list, because order matters
-  uniqdays=sorted(uniqdays,key=lambda x:datetime.datetime.strptime(x,'%m/%d/%Y'))
+    # build list of dates
+    uniqdays=[f['transdate'] for f in mtdb.all()]
+    uniqdays=set(uniqdays)  # get unique values
+    uniqdays=list(uniqdays)  # convert it back into list, because order matters
+    uniqdays=sorted(uniqdays,key=lambda x:datetime.datetime.strptime(x,'%m/%d/%Y'))
 
-  #### output fun statistics ####
-  print('\n'*2)
+    # output fun statistics
+    print('\n'*2)
 
-  print("### overall statistics ###")
-  resrow=[]
-  sumtot=0
-  for f in mtdb.all():
-    sumtot+=f['amount']
-  # round sumtot to nearest cent
-  sumtot="%0.2f" % sumtot
-  sumtot=float(sumtot)
-  resrow.append(['Total amount spent',sumtot])
-  resrow.append(['Number of items',len(mtdb)])
-  resrow.append(['Average amount per item',"%0.2f" % (sumtot/len(mtdb))])
-  resrow.append(['Start date',uniqdays[0]])
-  resrow.append(['End date',uniqdays[-1]])
-  for f in resrow:
-    print("%-30s: %10s" % (f[0],f[1]))
-  save_csv(resrow,"overview.csv")
-
-  # total sum per category
-  print("")
-  print("### spending by category ###")
-  resrow=[]
-  for tag in uniqtags:
+    print("### overall statistics ###")
+    resrow = []
     sumtot = 0
-    for f in mtdb.search(tinydb.Query().tag == tag):
-      sumtot += f['amount']
-    numf=mtdb.count(tinydb.Query().tag == tag)
-    resrow.append([tag,sumtot,numf,sumtot/numf])
-  # sort by sumtot
-  for f in sorted(resrow, key=operator.itemgetter(1)):
-    print("%-15s: %10.2f (number of items: %3d, avg spend per item: %10.2f)" % (f[0],f[1],f[2],f[3]))
-  save_csv(resrow,"spending_per_category.csv")
+    for f in mtdb.all():
+        sumtot += f['amount']
+    # round sumtot to nearest cent
+    sumtot = "%0.2f" % sumtot
+    sumtot = float(sumtot)
+    resrow.append(['Total amount spent', sumtot])
+    resrow.append(['Number of items', len(mtdb)])
+    resrow.append(['Average amount per item', "%0.2f" % (sumtot/len(mtdb))])
+    resrow.append(['Start date', uniqdays[0]])
+    resrow.append(['End date', uniqdays[-1]])
+    for f in resrow:
+        print("%-30s: %10s" % (f[0], f[1]))
+    bf.save_csv(resrow, "overview.csv")
 
-  # money spent per day
-  plusfac=-50
-  print("")
-  print("### spending by day ###")
-  resrow=[]
-  for tag in uniqdays:
+    # total sum per category
+    print("")
+    print("### spending by category ###")
+    resrow = []
+    for tag in uniqtags:
+        sumtot = 0
+        for f in mtdb.search(tinydb.Query().tag == tag):
+            sumtot += f['amount']
+        numf=mtdb.count(tinydb.Query().tag == tag)
+        resrow.append([tag, sumtot, numf, sumtot/numf])
+    # sort by sumtot
+    for f in sorted(resrow, key=operator.itemgetter(1)):
+        print("%-15s: %10.2f (number of items: %3d, avg spend per item: %10.2f)" % (f[0], f[1], f[2], f[3]))
+    bf.save_csv(resrow, "spending_per_category.csv")
+
+    # money spent per day
+    plusfac = -50
+    print("")
+    print("### spending by day ###")
+    resrow = []
+    for tag in uniqdays:
+        sumtot = 0
+        for f in mtdb.search(tinydb.Query().transdate == tag):
+            sumtot += f['amount']
+        resrow.append([tag,sumtot])
+
+    for f in resrow:
+        sys.stdout.write("%-10s: %8.2f   " % (f[0], f[1]))
+        sys.stdout.flush()
+        print("+"*(int(f[1]/plusfac)))
+    bf.save_csv(resrow, "spending_per_day.csv")
+
+    # highest spend per category
+    print("")
+    print("### highest spending per category ###")
+    resrow = []
     sumtot = 0
-    for f in mtdb.search(tinydb.Query().transdate == tag):
-      sumtot += f['amount']
-    resrow.append([tag,sumtot])
+    for tag in uniqtags:
+        min = 0
+        str = ''
+        for f in mtdb.search(tinydb.Query().tag == tag):
+            if f['amount'] < min:
+                min = f['amount']
+                str = f
+        resrow.append([str['tag'], str['description'], str['amount']])
+        sumtot += str['amount']
+    print("%-15s %-30s %s" % ("==tag==", "==description==", "==amount=="))
+    for f in sorted(resrow, key=operator.itemgetter(2)):
+        print("%-15s %-30s %8.2f" % (f[0], f[1], f[2]))
+    print("%-46s %8.2f" % ("--- total ---", sumtot))
+    bf.save_csv(resrow, "highest_spend_per_category.csv")
 
-    #sys.stdout.write("%-10s: %8.2f   " % (tag,sumtot))
-    #sys.stdout.flush()
-    #print("+"*(int(sumtot/plusfac)))
-  for f in resrow:
-    sys.stdout.write("%-10s: %8.2f   " % (f[0],f[1]))
-    sys.stdout.flush()
-    print("+"*(int(f[1]/plusfac)))
-  save_csv(resrow,"spending_per_day.csv")
-
-  # highest spend per category
-  print("")
-  print("### highest spending per category ###")
-  resrow=[]
-  sumtot=0
-  for tag in uniqtags:
-    min=0
-    str=''
-    for f in mtdb.search(tinydb.Query().tag == tag):
-      if f['amount']<min:
-        min=f['amount']
-        str=f
-    #print("tag: %15s  item: %30s  amount: %0.2f" % (str['tag'],str['description'],str['amount']))
-    resrow.append([str['tag'],str['description'],str['amount']])
-    sumtot+=str['amount']
-  print("%-15s %-30s %s" % ("==tag==","==description==","==amount=="))
-  for f in sorted(resrow, key=operator.itemgetter(2)):
-    print("%-15s %-30s %8.2f" % (f[0],f[1],f[2]))
-  print("%-46s %8.2f" % ("--- total ---",sumtot))
-  save_csv(resrow,"highest_spend_per_category.csv")
-
-  # list items over a certain threshold
-  threshold=-100
-  print("")
-  print("### items over %0.2f ###" % (threshold))
-  resrow=[]
-  sumtot=0
-  for f in mtdb.search(tinydb.Query().tag.exists()):
-    if (f['amount']<=threshold):
-      resrow.append([f['tag'],f['description'],f['amount']])
-      #print("tag: %15s  item: %30s  amount: %0.2f" % (f['tag'],f['description'],f['amount']))
-      sumtot+=f['amount']
-  print("%-15s %-30s %s" % ("==tag==","==description==","==amount=="))
-  for f in sorted(resrow, key=operator.itemgetter(2)):
-    print("%-15s %-30s %8.2f" % (f[0],f[1],f[2]))
-  print("%-46s %8.2f" % ("--- total ---",sumtot))
-  save_csv(resrow,"items_over_spend_threshold.csv")
-  plot_py("spending_per_category.csv","spending_per_day.csv","highest_spend_per_category.csv","items_over_spend_threshold.csv")
+    # list items over a certain threshold
+    threshold = -100
+    print("")
+    print("### items over %0.2f ###" % threshold)
+    resrow = []
+    sumtot = 0
+    for f in mtdb.search(tinydb.Query().tag.exists()):
+        if (f['amount'] <= threshold):
+            resrow.append([f['tag'], f['description'], f['amount']])
+            sumtot += f['amount']
+    print("%-15s %-30s %s" % ("==tag==", "==description==", "==amount=="))
+    for f in sorted(resrow, key=operator.itemgetter(2)):
+        print("%-15s %-30s %8.2f" % (f[0], f[1], f[2]))
+    print("%-46s %8.2f" % ("--- total ---", sumtot))
+    bf.save_csv(resrow,"items_over_spend_threshold.csv")
+    bf.plot_py("spending_per_category.csv", "spending_per_day.csv", "highest_spend_per_category.csv", "items_over_spend_threshold.csv")
 # end print_output
 
 
-
-
 if __name__ == "__main__":
-  main()
-
+    main()

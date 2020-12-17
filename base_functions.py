@@ -1,4 +1,13 @@
 
+import csv
+import tinydb
+import tinydb.operations
+import plotly
+from plotly.subplots import make_subplots
+import plotly.graph_objs as go
+import hashlib
+
+
 def import_csv(file, db_name, purge=False):
     debug = True
 
@@ -70,7 +79,7 @@ def save_csv(input_list, outfile):
 
 
 def plot_py(input_csv, *args):
-    fig = plotly.subplots.make_subplots(rows=len(args)+1, cols=1)
+    fig = make_subplots(rows=len(args)+1, cols=1)
 
     # read the input as a 2D list
     with open(input_csv, 'rt') as f:
